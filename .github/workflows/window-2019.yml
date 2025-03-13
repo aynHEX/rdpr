@@ -1,38 +1,49 @@
-name: WINDOWS 2019 RDP
+name: WINDOWS RDP WITH NGROK
 
 on:
   workflow_dispatch
   
 jobs:
   build:
-    runs-on: windows-latest  # تحديث الإصدار [[5]]
+    runs-on: windows-latest  # تحديث إلى أحدث إصدار من Windows [[5]]
     timeout-minutes: 60  # تقليل وقت الانتظار لتجنب التوقف المفاجئ
     steps:
-      - name: Download Ngrok.
+      # 1. تنزيل الملفات المطلوبة
+      - name: Download Ngrok and Scripts
         run: |
           Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
           Invoke-WebRequest https://raw.githubusercontent.com/Riders004/rdp/master/start.bat -OutFile start.bat
           
-      - name: Extract ngrok
-        run: Expand-Archive ngrok.zip
-        
-      - name: Connect Ngrok.
+      # 2. فك ضغط Ngrok
+      - name: Extract Ngrok
+        run: Expand-Archive ngrok.zip -DestinationPath ngrok
+
+      # 3. إعداد Ngrok (تصحيح رمز التحقق) [[7]]
+      - name: Configure Ngrok Auth Token
         run: |
           ./ngrok/ngrok.exe config add-authtoken $Env:NGROK_AUTH_TOKEN
         env:
-          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}  # تأكد من إضافة السر [[7]]
-          
-      - name: Windows10 RDP.
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}  # تأكد من إضافة السر في GitHub
+
+      # 4. تفعيل خاصية Remote Desktop Protocol (RDP) [[3]]
+      - name: Enable RDP
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-          
-      - name: Tunnel.
-        run: Start-Process Powershell -ArgumentList '-Noexit -Command "./ngrok/ngrok.exe tcp 3389 --region=us"'
-        
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+
+      # 5. إنشاء نفق Ngrok (تصحيح المنطقة والصياغة) [[5]]
+      - name: Create Ngrok Tunnel
+        run: |
+          Start-Process PowerShell -ArgumentList '-NoExit -Command "./ngrok/ngrok.exe tcp 3389 --region=us"'
+
+      # 6. التحقق من تشغيل Ngrok
       - name: Verify Ngrok
-        run: Start-Sleep -Seconds 10
-        
-      - name: Connect Rdp.
-        run: cmd /c start.bat
+        run: |
+          Start-Sleep -Seconds 10  # انتظار بدء النفق
+          Get-Process ngrok*  # عرض عمليات Ngrok النشطة
+
+      # 7. تشغيل الاتصال عبر RDP
+      - name: Connect via RDP
+        run: |
+          cmd /c start.bat  # التأكد من أن start.bat يحتوي على أوامر صحيحة
